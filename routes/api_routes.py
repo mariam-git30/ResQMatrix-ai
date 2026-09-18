@@ -13,6 +13,7 @@ from services.allocation_service import (
     optimize_and_persist,
 )
 from ai.priority_engine import PriorityEngine, rank_emergencies
+from ai.optimizer import ResourceOptimizer
 from database.db import connection_scope, get_connection, row_to_dict, rows_to_dicts
 
 
@@ -197,6 +198,12 @@ def _validate_resource(data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, 
         ),
         "capacity": _number(
             data, "capacity", errors, integer=True, minimum=0
+        ),
+        "cost_per_unit": _number(
+            data, "cost_per_unit", errors, default=0, minimum=0
+        ),
+        "risk_score": _number(
+            data, "risk_score", errors, default=50, minimum=0, maximum=100
         ),
     }
     if (
@@ -555,10 +562,32 @@ def list_allocations():
 
 @api_bp.post("/optimize")
 def optimize_allocations():
-    """Run the global optimizer and persist fresh RECOMMENDED rows only."""
+    """Run the global optimizer with optional operator-defined constraints."""
+    data = _payload() or {}
+    config: dict[str, Any] = {}
+    for field in ("max_distance_km", "max_eta_minutes", "cost_reference", "min_reserve_quantity"):
+        if field in data:
+            value = data[field]
+            try:
+                parsed = int(value) if field == "min_reserve_quantity" else float(value)
+            except (TypeError, ValueError):
+                return _error(f"{field} must be a number.")
+            if parsed < 0 or (field in {"max_distance_km", "max_eta_minutes", "cost_reference"} and parsed == 0):
+                return _error(f"{field} must be greater than zero.")
+            config[field] = parsed
+    if isinstance(data.get("weights"), dict):
+        config["weights"] = {key: value for key, value in data["weights"].items() if key in {
+            "priority", "compatibility", "proximity", "eta", "availability", "scarcity", "fairness", "cost", "risk"
+        }}
     try:
         with connection_scope(current_app.config["DATABASE_PATH"]) as connection:
-            result = optimize_and_persist(connection)
+            result = optimize_and_persist(connection, optimizer=ResourceOptimizer(config))
+        result["constraints"] = {
+            "max_distance_km": config.get("max_distance_km", 750.0),
+            "max_eta_minutes": config.get("max_eta_minutes", 720.0),
+            "cost_reference": config.get("cost_reference", 5000.0),
+            "min_reserve_quantity": config.get("min_reserve_quantity", 0),
+        }
         return jsonify({"status": "success", "data": result})
     except Exception as exc:
         current_app.logger.exception("Optimization failed")
@@ -587,7 +616,8 @@ def approve_allocation(allocation_id: int):
             return _error("Allocation quantity must be positive.")
         if qty > available:
             return _error(
-                f"Only {available} unit(s) remain available for this resource; cannot approve {qty}."
+                f"This recommendation is no longer feasible: {qty} unit(s) were recommended, but only {available} unit(s) are currently available. Resource availability changed; run optimization again before approving.",
+                status=409,
             )
         remaining = available - qty
         new_resource_status = "DEPLOYED" if remaining == 0 else "PARTIALLY_AVAILABLE"

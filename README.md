@@ -108,3 +108,12 @@ resqmatrix-ai/
 ├── templates/
 └── static/
 ```
+
+## AIML-04 decision optimizer controls
+The dashboard now supports operator-defined feasibility constraints for each optimization run:
+- Maximum resource distance (km)
+- Maximum estimated ETA (minutes)
+- Cost reference for cost-aware scoring
+- Minimum reserve units per resource
+
+Resources also support illustrative `cost_per_unit` and `risk_score` values. Recommendations persist their decision score, distance, cost estimate, risk, and a trade-off summary. These values are decision-support/demo signals and do not replace official emergency protocols.

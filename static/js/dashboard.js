@@ -400,6 +400,8 @@
       $("#resourceCapacity").value = record.capacity ?? "";
       $("#resourceLatitude").value = record.latitude ?? "";
       $("#resourceLongitude").value = record.longitude ?? "";
+      $("#resourceCost").value = record.cost_per_unit ?? 0;
+      $("#resourceRisk").value = record.risk_score ?? 50;
     } else {
       $("#resourceStatus").value = "AVAILABLE";
       $("#resourceQuantity").value = 1;
@@ -421,7 +423,7 @@
     new FormData(form).forEach((value, key) => {
       if (key !== "id") data[key] = value;
     });
-    ["severity", "urgency", "people_affected", "injured", "critical_injured", "latitude", "longitude", "quantity", "available_quantity", "capacity"].forEach((field) => {
+    ["severity", "urgency", "people_affected", "injured", "critical_injured", "latitude", "longitude", "quantity", "available_quantity", "capacity", "cost_per_unit", "risk_score"].forEach((field) => {
       if (field in data) data[field] = data[field] === "" ? null : Number(data[field]);
     });
     return data;
@@ -533,7 +535,7 @@
     container.innerHTML=`<table class="allocation-table"><thead><tr><th>Emergency</th><th>Resource</th><th>Qty</th><th>Priority</th><th>Match</th><th>Distance / ETA</th><th>Status</th><th>Reason</th><th>Action</th></tr></thead><tbody>${rows.map(a=>`
       <tr><td><strong>${escapeHtml(a.emergency_title||("Emergency #"+a.emergency_id))}</strong><br><span class="review-meta">${escapeHtml(label(priorityLevelForEmergency(a.emergency_id)))}</span></td>
       <td>${escapeHtml(a.resource_name||("Resource #"+a.resource_id))}<br><span class="review-meta">${escapeHtml(label(a.resource_type))}</span></td><td><strong>${a.quantity}</strong></td><td>${Number(a.priority_score||0).toFixed(2)}</td><td class="match-score">${Number(a.match_score||0).toFixed(2)}</td><td>${a.distance_km==null?'—':Number(a.distance_km).toFixed(1)+' km'}<br><span class="review-meta">${a.eta_minutes==null?'ETA unavailable':Number(a.eta_minutes).toFixed(1)+' min est.'}</span></td>
-      <td><span class="status-pill status-${String(a.status).toLowerCase()}">${escapeHtml(label(a.status))}</span></td><td class="allocation-reason">${escapeHtml(a.allocation_reason||'')}</td>
+      <td><span class="status-pill status-${String(a.status).toLowerCase()}">${escapeHtml(label(a.status))}</span></td><td class="allocation-reason"><strong>₹${Number(a.cost_estimate||0).toFixed(0)}</strong> · Risk ${Number(a.risk_score||0).toFixed(0)}/100<br>${escapeHtml(a.allocation_reason||'')}<br><span class="review-meta">${escapeHtml(a.tradeoff_summary||'')}</span></td>
       <td class="allocation-actions">${a.status==='RECOMMENDED'?`<button class="btn btn-sm btn-outline-secondary approve-allocation" data-id="${a.id||a.allocation_id}">Approve</button><button class="btn btn-sm btn-outline-secondary reject-allocation" data-id="${a.id||a.allocation_id}">Reject</button>`:'—'}</td></tr>`).join('')}</tbody></table>`;
     container.querySelectorAll('.approve-allocation').forEach(b=>b.addEventListener('click',()=>decideAllocation(Number(b.dataset.id),'approve')));
     container.querySelectorAll('.reject-allocation').forEach(b=>b.addEventListener('click',()=>decideAllocation(Number(b.dataset.id),'reject')));
@@ -546,15 +548,28 @@
 
   async function runOptimization(){
     const b=$("#runOptimization"); if(b){b.disabled=true;b.textContent='Optimizing…';}
-    try{const r=await request('/api/optimize',{method:'POST',body:JSON.stringify({})});state.optimization=r.data;state.allocations=r.data.recommendations||[];renderAllocationMetrics();renderAllocations();renderReview();const w=$("#allocationWarning");if(w){const list=r.data.unfulfilled_demand||[];w.classList.toggle('d-none',!list.length);w.innerHTML=list.length?`<strong>Resource constrained:</strong> ${list.length} emergency/emergencies have unmet demand. The optimizer did not exceed available quantities.`:'';} await loadDashboard(); await loadAllocations();}
+    try{const payload={max_distance_km:Number($("#maxDistanceKm")?.value||750),max_eta_minutes:Number($("#maxEtaMinutes")?.value||720),cost_reference:Number($("#costReference")?.value||5000),min_reserve_quantity:Number($("#minReserveQuantity")?.value||0)};const r=await request('/api/optimize',{method:'POST',body:JSON.stringify(payload)});state.optimization=r.data;state.allocations=r.data.recommendations||[];renderAllocationMetrics();renderAllocations();renderReview();const w=$("#allocationWarning");if(w){const list=r.data.unfulfilled_demand||[];w.classList.toggle('d-none',!list.length);w.innerHTML=list.length?`<strong>Resource constrained:</strong> ${list.length} emergency/emergencies have unmet demand. The optimizer did not exceed available quantities.`:'';} await loadDashboard(); await loadAllocations();}
     catch(e){window.alert(e.message)}finally{if(b){b.disabled=false;b.innerHTML='Run AI optimization <span>↗</span>';}}
   }
 
   async function decideAllocation(id, action){
     if(!id)return;
     if(action==='approve' && !window.confirm('Approve this recommendation and deploy the listed quantity?')) return;
-    try{await request(`/api/allocations/${id}/${action}`,{method:'POST',body:JSON.stringify({})});await loadDashboard();await loadAllocations();}
-    catch(e){window.alert(e.message)}
+    try {
+      await request(`/api/allocations/${id}/${action}`, {method:'POST', body:JSON.stringify({})});
+      await loadDashboard();
+      await loadAllocations();
+      if (action === 'approve') { window.alert('Allocation approved and resource availability updated.'); }
+      else { window.alert('Recommendation rejected. Resource quantity was not changed.'); }
+    } catch (e) {
+      window.alert(action === 'approve'
+        ? `${e.message}\n\nRun AI optimization again to refresh recommendations.`
+        : e.message);
+      if (action === 'approve' && /no longer feasible|availability changed|currently available/i.test(e.message)) {
+        await loadDashboard();
+        await loadAllocations();
+      }
+    }
   }
 
   function renderReview(){

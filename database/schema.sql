@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS resources (
     location TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'AVAILABLE',
     capacity INTEGER,
+    cost_per_unit REAL NOT NULL DEFAULT 0,
+    risk_score REAL NOT NULL DEFAULT 50,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -40,6 +42,11 @@ CREATE TABLE IF NOT EXISTS allocations (
     quantity INTEGER NOT NULL DEFAULT 1,
     priority_score REAL DEFAULT 0,
     eta_minutes REAL,
+    distance_km REAL,
+    match_score REAL DEFAULT 0,
+    cost_estimate REAL DEFAULT 0,
+    risk_score REAL DEFAULT 50,
+    tradeoff_summary TEXT,
     allocation_reason TEXT,
     status TEXT NOT NULL DEFAULT 'RECOMMENDED',
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,

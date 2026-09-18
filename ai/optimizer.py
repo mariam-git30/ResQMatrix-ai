@@ -18,13 +18,15 @@ from .resource_matcher import (
 
 
 OPTIMIZATION_WEIGHTS: dict[str, float] = {
-    "priority": 0.35,
-    "compatibility": 0.20,
-    "proximity": 0.15,
-    "eta": 0.10,
+    "priority": 0.25,
+    "compatibility": 0.15,
+    "proximity": 0.12,
+    "eta": 0.13,
     "availability": 0.10,
     "scarcity": 0.05,
     "fairness": 0.05,
+    "cost": 0.05,
+    "risk": 0.10,
 }
 
 DEMAND_RULES: dict[str, dict[str, float]] = {
@@ -78,6 +80,10 @@ DEFAULT_OPTIMIZATION_CONFIG: dict[str, Any] = {
     "max_demand_per_type": 10,
     "proximity_reference_km": 100.0,
     "eta_reference_minutes": 180.0,
+    "max_distance_km": 750.0,
+    "max_eta_minutes": 720.0,
+    "cost_reference": 5000.0,
+    "min_reserve_quantity": 0,
     "speeds_kmh": {},
 }
 
@@ -133,7 +139,15 @@ def _copy_config(config: Mapping[str, Any] | None) -> dict[str, Any]:
                     **merged["demand_rules"].get(key, {}),
                     **rule,
                 }
-    for key in ("max_demand_per_type", "proximity_reference_km", "eta_reference_minutes"):
+    for key in (
+        "max_demand_per_type",
+        "proximity_reference_km",
+        "eta_reference_minutes",
+        "max_distance_km",
+        "max_eta_minutes",
+        "cost_reference",
+        "min_reserve_quantity",
+    ):
         if key in config:
             merged[key] = config[key]
     if isinstance(config.get("speeds_kmh"), Mapping):
@@ -162,6 +176,14 @@ class ResourceOptimizer:
             1.0,
             _number(self.config["eta_reference_minutes"], 180.0),
         )
+        self.max_distance_km = max(1.0, _number(self.config.get("max_distance_km"), 750.0))
+        self.max_eta_minutes = max(1.0, _number(self.config.get("max_eta_minutes"), 720.0))
+        self.cost_reference = max(1.0, _number(self.config.get("cost_reference"), 5000.0))
+        self.min_reserve_quantity = max(0, int(_number(self.config.get("min_reserve_quantity"), 0)))
+        # User-entered weights are normalized so they remain comparable.
+        total_weight = sum(self.weights.values())
+        if total_weight > 0:
+            self.weights = {key: value / total_weight for key, value in self.weights.items()}
         self.priority_engine = PriorityEngine()
 
     def estimate_demand(self, emergency: Mapping[str, Any]) -> dict[str, int]:
@@ -234,9 +256,12 @@ class ResourceOptimizer:
                 total_demand_by_type[resource_type] += quantity
 
         remaining_by_resource = {
-            _value(resource, "id"): min(
-                int(_number(_value(resource, "available_quantity"))),
-                int(_number(_value(resource, "quantity"))),
+            _value(resource, "id"): max(
+                0,
+                min(
+                    int(_number(_value(resource, "available_quantity"))),
+                    int(_number(_value(resource, "quantity"))),
+                ) - self.min_reserve_quantity,
             )
             for resource in resource_list
         }
@@ -270,8 +295,8 @@ class ResourceOptimizer:
                     ) - assigned_by_emergency[emergency_id].get(resource_type, 0)
                     if remaining_quantity <= 0 or remaining_demand <= 0:
                         continue
-                    candidates.append(
-                        self._candidate(
+                    try:
+                        candidate = self._candidate(
                             emergency,
                             resource,
                             priority_by_id[emergency_id],
@@ -283,7 +308,11 @@ class ResourceOptimizer:
                             demand_by_emergency,
                             ranked_active,
                         )
-                    )
+                    except ValueError as exc:
+                        if str(exc) in {"candidate_out_of_range", "candidate_eta_too_high"}:
+                            continue
+                        raise
+                    candidates.append(candidate)
             if not candidates:
                 break
             selected = max(
@@ -324,6 +353,16 @@ class ResourceOptimizer:
                 round(recommendation["eta_minutes"], 2)
                 if recommendation["eta_minutes"] is not None
                 else None
+            )
+            recommendation["distance_km"] = (
+                round(recommendation["distance_km"], 2)
+                if recommendation["distance_km"] is not None
+                else None
+            )
+            recommendation["cost_estimate"] = round(recommendation.get("cost_estimate", 0.0) * recommendation["quantity"], 2)
+            recommendation["tradeoff_summary"] = (
+                f"Balances priority {recommendation['priority_score']:.1f}, response time {recommendation['factors']['eta']:.0f}/100, "
+                f"cost efficiency {recommendation['factors']['cost']:.0f}/100 and safety {recommendation['factors']['risk']:.0f}/100."
             )
             recommendation["allocation_reason"] = self._allocation_reason(
                 recommendation
@@ -397,6 +436,13 @@ class ResourceOptimizer:
             resource_type,
             self.config["speeds_kmh"] or RESOURCE_SPEEDS_KMH,
         )
+        # Hard feasibility guardrails prevent obviously unsuitable long-distance
+        # recommendations. Missing coordinates remain eligible but are scored at 0
+        # for proximity/ETA so the operator can see the data-quality trade-off.
+        if distance is not None and distance > self.max_distance_km:
+            raise ValueError("candidate_out_of_range")
+        if eta is not None and eta > self.max_eta_minutes:
+            raise ValueError("candidate_eta_too_high")
         initial_quantity = max(_number(_value(resource, "quantity")), 1.0)
         proximity = (
             100 / (1 + (distance / self.proximity_reference_km))
@@ -431,6 +477,10 @@ class ResourceOptimizer:
             for other in ranked_active
         ):
             fairness *= 0.5
+        cost_per_unit = _number(_value(resource, "cost_per_unit"))
+        resource_risk = _clamp(_number(_value(resource, "risk_score"), 50.0))
+        cost_score = _clamp(100.0 * (1.0 - min(cost_per_unit / self.cost_reference, 1.0)))
+        risk_score = _clamp(100.0 - resource_risk)
         factors = {
             "priority": _number(priority.get("priority_score")),
             "compatibility": 100.0,
@@ -439,6 +489,8 @@ class ResourceOptimizer:
             "availability": availability,
             "scarcity": scarcity,
             "fairness": fairness,
+            "cost": cost_score,
+            "risk": risk_score,
         }
         match_score = _clamp(
             sum(factors[name] * self.weights.get(name, 0.0) for name in factors)
@@ -453,27 +505,33 @@ class ResourceOptimizer:
             "match_score": match_score,
             "distance_km": distance,
             "eta_minutes": eta,
+            "distance_km": distance,
+            "cost_per_unit": cost_per_unit,
+            "cost_estimate": cost_per_unit,
+            "risk_score": resource_risk,
             "factors": factors,
         }
 
     @staticmethod
     def _allocation_reason(recommendation: Mapping[str, Any]) -> str:
         eta = recommendation["eta_minutes"]
-        eta_text = (
-            f"{eta:.2f} minutes estimated"
-            if eta is not None
-            else "ETA unavailable because coordinates are missing or invalid"
-        )
+        distance = recommendation["distance_km"]
+        eta_text = f"{eta:.1f} min" if eta is not None else "ETA unavailable"
+        distance_text = f"{distance:.1f} km" if distance is not None else "distance unavailable"
         factors = recommendation["factors"]
+        cost = recommendation.get("cost_per_unit", 0.0)
+        risk = recommendation.get("risk_score", 50.0)
+        tradeoff = (
+            "favors response speed" if factors["eta"] >= factors["cost"] and factors["eta"] >= factors["risk"]
+            else "favors lower operating cost" if factors["cost"] >= factors["risk"]
+            else "favors lower operational risk"
+        )
         return (
-            f"Prototype match score {recommendation['match_score']:.2f}/100; "
-            f"priority {recommendation['priority_score']:.2f}/100; "
-            f"compatibility {factors['compatibility']:.0f}/100; "
-            f"distance {recommendation['distance_km']:.2f} km and {eta_text}; "
-            f"availability {factors['availability']:.0f}/100, "
-            f"scarcity {factors['scarcity']:.0f}/100, "
-            f"fairness {factors['fairness']:.0f}/100. "
-            "Estimated matching only; not an approval or dispatch."
+            f"Decision score {recommendation['match_score']:.2f}/100; priority {recommendation['priority_score']:.2f}/100. "
+            f"Response: {distance_text}, {eta_text}. Cost: ₹{cost:,.0f}/unit. Risk: {risk:.0f}/100. "
+            f"Availability {factors['availability']:.0f}/100, scarcity {factors['scarcity']:.0f}/100, fairness {factors['fairness']:.0f}/100. "
+            f"Trade-off: {tradeoff} within the configured constraints. "
+            "Estimated matching only; operator approval is required before deployment."
         )
 
 

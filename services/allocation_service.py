@@ -31,8 +31,9 @@ def replace_recommended_allocations(
             """
             INSERT INTO allocations
                 (emergency_id, resource_id, quantity, priority_score,
-                 eta_minutes, allocation_reason, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+                 eta_minutes, distance_km, match_score, cost_estimate, risk_score,
+                 tradeoff_summary, allocation_reason, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 recommendation["emergency_id"],
@@ -40,6 +41,11 @@ def replace_recommended_allocations(
                 recommendation["quantity"],
                 recommendation["priority_score"],
                 recommendation["eta_minutes"],
+                recommendation.get("distance_km"),
+                recommendation.get("match_score", 0),
+                recommendation.get("cost_estimate", 0),
+                recommendation.get("risk_score", 50),
+                recommendation.get("tradeoff_summary"),
                 recommendation["allocation_reason"],
                 RECOMMENDED_STATUS,
             ),

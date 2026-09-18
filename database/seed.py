@@ -146,6 +146,33 @@ DEMO_EMERGENCIES = [
     },
 ]
 
+
+
+DEMO_RESOURCE_ECONOMICS: dict[str, tuple[float, float]] = {
+    "AMBULANCE": (900.0, 20.0),
+    "FIRE_ENGINE": (1800.0, 28.0),
+    "RESCUE_TEAM": (1200.0, 22.0),
+    "RESCUE_BOAT": (1400.0, 18.0),
+    "MEDICAL_TEAM": (750.0, 15.0),
+    "HELICOPTER": (5000.0, 35.0),
+    "MEDICAL_KIT": (250.0, 8.0),
+    "BLOOD_UNIT": (600.0, 12.0),
+    "FOOD_SUPPLY": (80.0, 5.0),
+    "WATER_SUPPLY": (40.0, 4.0),
+    "SHELTER_KIT": (150.0, 6.0),
+    "OTHER": (500.0, 25.0),
+}
+
+
+def _apply_demo_economics(connection: sqlite3.Connection) -> None:
+    """Give demo resources transparent illustrative cost/risk values."""
+    for resource_type, (cost, risk) in DEMO_RESOURCE_ECONOMICS.items():
+        connection.execute(
+            "UPDATE resources SET cost_per_unit = ?, risk_score = ? WHERE type = ? AND (cost_per_unit = 0 OR cost_per_unit IS NULL)",
+            (cost, risk, resource_type),
+        )
+
+
 DEMO_RESOURCES = [
     {
         "name": "Rapid Response Ambulance Unit",
@@ -383,9 +410,10 @@ def _label_existing_demo_records(connection: sqlite3.Connection) -> None:
 
 
 def seed_demo_data(connection: sqlite3.Connection) -> None:
-    """Ensure the database contains the complete fictional Step 2 dataset."""
+    """Ensure the database contains the complete fictional demo dataset."""
     _insert_missing(connection, "emergencies", "title", DEMO_EMERGENCIES)
     _insert_missing(connection, "resources", "name", DEMO_RESOURCES)
+    _apply_demo_economics(connection)
     _label_existing_demo_records(connection)
 
     if connection.execute(

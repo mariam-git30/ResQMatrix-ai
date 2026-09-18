@@ -35,12 +35,35 @@ def connection_scope(database_path: str | Path) -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
+def _ensure_columns(connection: sqlite3.Connection) -> None:
+    """Migrate older Step 4 databases without deleting operator data."""
+    migrations = {
+        "resources": {
+            "cost_per_unit": "REAL NOT NULL DEFAULT 0",
+            "risk_score": "REAL NOT NULL DEFAULT 50",
+        },
+        "allocations": {
+            "distance_km": "REAL",
+            "match_score": "REAL DEFAULT 0",
+            "cost_estimate": "REAL DEFAULT 0",
+            "risk_score": "REAL DEFAULT 50",
+            "tradeoff_summary": "TEXT",
+        },
+    }
+    for table, columns in migrations.items():
+        existing = {row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}
+        for column, definition in columns.items():
+            if column not in existing:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def initialize_database(database_path: str | Path) -> None:
-    """Create the schema and seed a fresh database with demo records."""
+    """Create or migrate the schema and seed fictional demo records."""
     path = Path(database_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with connection_scope(path) as connection:
         connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        _ensure_columns(connection)
         seed_demo_data(connection)
 
 
