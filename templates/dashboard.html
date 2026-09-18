@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+
+{% block title %}Control Room | ResQMatrix AI{% endblock %}
+
+{% block body %}
+<main class="dashboard-page">
+  <div class="container-fluid dashboard-layout">
+    <aside class="dashboard-sidebar" id="dashboardNav">
+      <div class="sidebar-heading">OPERATIONS</div>
+      <nav class="side-nav" aria-label="Dashboard navigation">
+        <a class="side-nav-link active" href="{{ url_for('dashboard.dashboard') }}">
+          <span class="nav-icon nav-icon-grid" aria-hidden="true"></span>
+          <span>Command overview</span>
+          <span class="nav-arrow" aria-hidden="true">→</span>
+        </a>
+        <a class="side-nav-link" href="#incidents">
+          <span class="nav-icon nav-icon-alert" aria-hidden="true"></span>
+          <span>Incidents</span>
+          <span class="nav-count" id="incidentNavCount">00</span>
+        </a>
+        <a class="side-nav-link" href="#resources">
+          <span class="nav-icon nav-icon-resource" aria-hidden="true"></span>
+          <span>Resources</span>
+          <span class="nav-count" id="resourceNavCount">00</span>
+        </a>
+        <a class="side-nav-link" href="#optimization"><span class="nav-icon nav-icon-resource" aria-hidden="true"></span><span>Optimization</span></a>
+        <a class="side-nav-link" href="#review"><span class="nav-icon nav-icon-activity" aria-hidden="true"></span><span>Operator review</span></a>
+        <a class="side-nav-link" href="#map-section"><span class="nav-icon nav-icon-grid" aria-hidden="true"></span><span>Map</span></a>
+        <a class="side-nav-link" href="#simulation"><span class="nav-icon nav-icon-alert" aria-hidden="true"></span><span>Simulation</span></a>
+      </nav>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-heading">SYSTEM</div>
+      <nav class="side-nav" aria-label="System navigation">
+        <a class="side-nav-link" href="#activity">
+          <span class="nav-icon nav-icon-activity" aria-hidden="true"></span>
+          <span>Activity log</span>
+        </a>
+        <a class="side-nav-link" href="#settings">
+          <span class="nav-icon nav-icon-settings" aria-hidden="true"></span>
+          <span>Settings</span>
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="system-status">
+          <span class="status-check">✓</span>
+          <div>
+            <strong>Foundation ready</strong>
+            <small>Steps 1–4A complete</small>
+          </div>
+        </div>
+        <span class="version-label">BUILD 01.00</span>
+      </div>
+    </aside>
+
+    <section class="dashboard-content">
+      <div class="mobile-nav-row">
+        <button class="mobile-nav-toggle" type="button" aria-controls="dashboardNav" aria-expanded="false">
+          <span class="nav-icon nav-icon-grid" aria-hidden="true"></span>
+          Navigation
+          <span aria-hidden="true">☰</span>
+        </button>
+      </div>
+
+      <div class="dashboard-heading-row">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-line"></span> CONTROL ROOM / OVERVIEW</div>
+          <h1>Good morning, operator.</h1>
+          <p class="muted-copy">Your emergency operations workspace is ready for live coordination.</p>
+        </div>
+        <div class="heading-meta">
+          <span class="date-display" id="currentDate">18 SEP 2026</span>
+          <span class="time-display" id="currentTime">--:--:-- IST</span>
+        </div>
+      </div>
+
+      <div class="status-banner">
+        <div class="banner-icon" aria-hidden="true">✦</div>
+        <div>
+          <strong>AI Priority Engine Online</strong>
+          <span>Analyzing emergency factors locally.</span>
+          <small class="ai-engine-label">Rule-based weighted decision engine</small>
+        </div>
+        <span class="banner-badge" id="apiStatus">CHECKING API</span>
+      </div>
+
+      <div class="metrics-grid">
+        <article class="metric-card">
+          <div class="metric-topline"><span>ACTIVE INCIDENTS</span><span class="metric-symbol">↗</span></div>
+          <div class="metric-value" id="activeIncidentCount">—</div>
+          <div class="metric-foot">Active or in progress</div>
+        </article>
+        <article class="metric-card accent-card">
+          <div class="metric-topline"><span>AVAILABLE RESOURCES</span><span class="metric-symbol">◌</span></div>
+          <div class="metric-value" id="availableResourceCount">—</div>
+          <div class="metric-foot">Units ready for dispatch</div>
+        </article>
+        <article class="metric-card">
+          <div class="metric-topline"><span>RESPONSE ACTIONS</span><span class="metric-symbol">✦</span></div>
+          <div class="metric-value" id="responseActionCount">—</div>
+          <div class="metric-foot">Recorded today</div>
+        </article>
+      </div>
+
+      <article class="panel priority-panel" id="priority">
+        <div class="panel-heading">
+          <div>
+            <span class="panel-kicker">LOCAL DECISION SUPPORT</span>
+            <h2>AI Emergency Priority</h2>
+          </div>
+          <button class="btn btn-outline-secondary btn-sm" type="button" id="recalculatePriorities">Recalculate priorities</button>
+        </div>
+        <p class="panel-intro">A configurable weighted signal for human operator review. No resources are allocated or dispatched.</p>
+        <div class="priority-table-wrap" id="priorityList">
+          <div class="loading-state">Calculating current priorities…</div>
+        </div>
+      </article>
+
+      <div class="workspace-grid">
+        <article class="panel panel-large" id="incidents">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">LIVE QUEUE</span>
+              <h2>Incident workspace</h2>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" type="button" id="openEmergencyModal">+ New emergency</button>
+          </div>
+          <div class="incident-list" id="incidentList">
+            <div class="loading-state">Loading emergency queue…</div>
+          </div>
+        </article>
+
+        <article class="panel" id="resources">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">RESOURCE READINESS</span>
+              <h2>Field assets</h2>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" type="button" id="openResourceModal">+ Add resource</button>
+          </div>
+          <div class="resource-list" id="resourceList">
+            <div class="loading-state">Loading resource registry…</div>
+          </div>
+        </article>
+      </div>
+
+
+      <section class="optimization-section" id="optimization">
+        <div class="section-hero">
+          <div>
+            <span class="panel-kicker">STEP 4B · MULTI-CRITERIA OPTIMIZATION</span>
+            <h2>AI Resource Allocation</h2>
+            <p>Ranks compatible resources across active emergencies using priority, compatibility, proximity, estimated ETA, availability, scarcity and a transparent fairness signal.</p>
+          </div>
+          <button class="btn btn-primary optimization-run" type="button" id="runOptimization">Run AI optimization <span>↗</span></button>
+        </div>
+        <div class="optimization-note">RECOMMENDATIONS ONLY · Estimated distance/ETA · Human approval required before deployment</div>
+        <div class="allocation-metrics" id="allocationMetrics">
+          <article><span>RECOMMENDATIONS</span><strong id="allocationCount">—</strong><small>Current optimizer output</small></article>
+          <article><span>UNFULFILLED</span><strong id="unfulfilledCount">—</strong><small>Demand not covered</small></article>
+          <article><span>APPROVED</span><strong id="approvedCount">—</strong><small>Operator-approved allocations</small></article>
+          <article><span>AVAILABLE UNITS</span><strong id="liveAvailableCount">—</strong><small>Live resource quantity</small></article>
+        </div>
+        <div class="allocation-toolbar">
+          <select id="allocationPriorityFilter" aria-label="Filter by priority"><option value="">All priorities</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option></select>
+          <select id="allocationTypeFilter" aria-label="Filter by resource type"><option value="">All resource types</option></select>
+          <select id="allocationStatusFilter" aria-label="Filter by status"><option value="">All statuses</option><option>RECOMMENDED</option><option>APPROVED</option><option>REJECTED</option></select>
+          <button class="btn btn-outline-secondary" id="refreshAllocations" type="button">Refresh</button>
+        </div>
+        <div id="allocationWarning" class="allocation-warning d-none"></div>
+        <div class="allocation-table-wrap" id="allocationList"><div class="loading-state">Run optimization to generate recommendations.</div></div>
+      </section>
+
+      <section class="review-section" id="review">
+        <div class="panel-heading"><div><span class="panel-kicker">STEP 5 · HUMAN-IN-THE-LOOP</span><h2>Operator Review</h2></div><span class="muted-label">APPROVAL GATE</span></div>
+        <p class="panel-intro">AI suggestions never dispatch resources automatically. Operators can approve or reject each recommendation; approval reconciles the live available quantity.</p>
+        <div id="reviewList" class="review-grid"><div class="loading-state">Loading recommendations…</div></div>
+      </section>
+
+      <section class="map-section" id="map-section">
+        <div class="panel-heading"><div><span class="panel-kicker">STEP 6 · GEOSPATIAL VIEW</span><h2>Emergency & Resource Map</h2></div><span class="muted-label">ESTIMATED POSITIONS</span></div>
+        <div class="map-legend"><span><i class="legend-dot emergency-dot"></i> Emergencies</span><span><i class="legend-dot resource-dot"></i> Resources</span></div>
+        <div id="resqMap" class="resq-map"><div class="loading-state">Loading map…</div></div>
+      </section>
+
+      <section class="simulation-section" id="simulation">
+        <div class="panel-heading"><div><span class="panel-kicker">STEP 7 · WHAT-IF SIMULATION</span><h2>Resource Stress Test</h2></div><span class="muted-label">NON-PERSISTENT</span></div>
+        <p class="panel-intro">Test how recommendations change if a percentage of currently available resources becomes unavailable. The scenario does not modify the database.</p>
+        <div class="simulation-controls"><label for="resourceReduction">Simulate resource reduction <strong id="resourceReductionValue">20%</strong></label><input id="resourceReduction" type="range" min="0" max="80" step="10" value="20"><button class="btn btn-primary" id="runSimulation" type="button">Run what-if</button></div>
+        <div id="simulationResult" class="simulation-result"><span>Scenario output will appear here.</span></div>
+      </section>
+
+      <section class="analytics-section" id="analytics">
+        <div class="panel-heading"><div><span class="panel-kicker">STEP 8 · ANALYTICS</span><h2>Response Intelligence</h2></div><button class="btn btn-outline-secondary" id="refreshAnalytics" type="button">Refresh analytics</button></div>
+        <div id="analyticsGrid" class="analytics-grid"><div class="loading-state">Loading analytics…</div></div>
+      </section>
+
+      <div class="bottom-grid">
+        <article class="panel activity-panel" id="activity">
+          <div class="panel-heading">
+            <div><span class="panel-kicker">AUDIT TRAIL</span><h2>Recent activity</h2></div>
+            <span class="muted-label">LIVE</span>
+          </div>
+          <div class="activity-list" id="activityList"><div class="loading-state">Loading activity…</div></div>
+        </article>
+        <article class="panel readiness-panel" id="settings">
+          <div class="panel-heading">
+            <div><span class="panel-kicker">FOUNDATION CHECK</span><h2>System readiness</h2></div>
+          </div>
+          <div class="readiness-list">
+            <div><span>Flask application</span><strong class="ready-text">READY</strong></div>
+            <div><span>Dashboard interface</span><strong class="ready-text">READY</strong></div>
+            <div><span>SQLite database</span><strong class="ready-text" id="databaseReadiness">CHECKING</strong></div>
+            <div><span>API health route</span><strong class="ready-text" id="healthReadiness">CHECKING</strong></div>
+          </div>
+        </article>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="modal fade" id="priorityModal" tabindex="-1" aria-labelledby="priorityModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content operation-modal priority-modal">
+      <div class="modal-header">
+        <div>
+          <span class="panel-kicker">PRIORITY ANALYSIS</span>
+          <h2 id="priorityModalTitle">Why this priority?</h2>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="priorityModalBody">
+        <div class="loading-state">Loading priority analysis…</div>
+      </div>
+      <div class="modal-footer">
+        <span class="decision-support-note">Decision support only — human operators remain responsible for decisions.</span>
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="emergencyModal" tabindex="-1" aria-labelledby="emergencyModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content operation-modal">
+      <div class="modal-header">
+        <div><span class="panel-kicker">EMERGENCY INTAKE</span><h2 id="emergencyModalTitle">New emergency</h2></div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="emergencyForm">
+        <div class="modal-body">
+          <input type="hidden" id="emergencyId" />
+          <div class="form-grid">
+            <div class="form-field form-field-wide"><label for="emergencyTitle">Title <span>*</span></label><input id="emergencyTitle" name="title" required maxlength="120" placeholder="e.g. Bridge collapse near Sector 4" /></div>
+            <div class="form-field"><label for="emergencyType">Type <span>*</span></label><select id="emergencyType" name="type" required>
+              <option value="FIRE">Fire</option><option value="FLOOD">Flood</option><option value="ROAD_ACCIDENT">Road accident</option><option value="BUILDING_COLLAPSE">Building collapse</option><option value="MEDICAL">Medical</option><option value="LANDSLIDE">Landslide</option><option value="CYCLONE">Cyclone</option><option value="CHEMICAL">Chemical</option><option value="OTHER">Other</option>
+            </select></div>
+            <div class="form-field"><label for="emergencyStatus">Status</label><select id="emergencyStatus" name="status"><option value="ACTIVE">Active</option><option value="IN_PROGRESS">In progress</option><option value="RESOLVED">Resolved</option><option value="CANCELLED">Cancelled</option></select></div>
+            <div class="form-field form-field-wide"><label for="emergencyLocation">Location <span>*</span></label><input id="emergencyLocation" name="location" required maxlength="160" placeholder="Area, landmark, or address" /></div>
+            <div class="form-field form-field-wide"><label for="emergencyDescription">Situation notes</label><textarea id="emergencyDescription" name="description" rows="3" maxlength="500" placeholder="Brief operational description"></textarea></div>
+            <div class="form-field"><label for="emergencySeverity">Severity (0–100)</label><input id="emergencySeverity" name="severity" type="number" min="0" max="100" value="50" /></div>
+            <div class="form-field"><label for="emergencyUrgency">Urgency (0–100)</label><input id="emergencyUrgency" name="urgency" type="number" min="0" max="100" value="50" /></div>
+            <div class="form-field"><label for="peopleAffected">People affected</label><input id="peopleAffected" name="people_affected" type="number" min="0" value="0" /></div>
+            <div class="form-field"><label for="injured">Injured</label><input id="injured" name="injured" type="number" min="0" value="0" /></div>
+            <div class="form-field"><label for="criticalInjured">Critical injured</label><input id="criticalInjured" name="critical_injured" type="number" min="0" value="0" /></div>
+            <div class="form-field"><label for="reportedTime">Reported time</label><input id="reportedTime" name="reported_time" type="datetime-local" /></div>
+            <div class="form-field"><label for="emergencyLatitude">Latitude</label><input id="emergencyLatitude" name="latitude" type="number" step="any" min="-90" max="90" placeholder="Optional" /></div>
+            <div class="form-field"><label for="emergencyLongitude">Longitude</label><input id="emergencyLongitude" name="longitude" type="number" step="any" min="-180" max="180" placeholder="Optional" /></div>
+          </div>
+          <div class="form-error" id="emergencyFormError" role="alert"></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary modal-submit">Save emergency</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="resourceModal" tabindex="-1" aria-labelledby="resourceModalTitle" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content operation-modal">
+      <div class="modal-header">
+        <div><span class="panel-kicker">RESOURCE REGISTRY</span><h2 id="resourceModalTitle">Add resource</h2></div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form id="resourceForm">
+        <div class="modal-body">
+          <input type="hidden" id="resourceId" />
+          <div class="form-grid">
+            <div class="form-field form-field-wide"><label for="resourceName">Name <span>*</span></label><input id="resourceName" name="name" required maxlength="120" placeholder="e.g. Central Ambulance Unit" /></div>
+            <div class="form-field"><label for="resourceType">Type <span>*</span></label><select id="resourceType" name="type" required>
+              <option value="AMBULANCE">Ambulance</option><option value="FIRE_ENGINE">Fire engine</option><option value="RESCUE_TEAM">Rescue team</option><option value="RESCUE_BOAT">Rescue boat</option><option value="MEDICAL_TEAM">Medical team</option><option value="HELICOPTER">Helicopter</option><option value="MEDICAL_KIT">Medical kit</option><option value="BLOOD_UNIT">Blood unit</option><option value="FOOD_SUPPLY">Food supply</option><option value="WATER_SUPPLY">Water supply</option><option value="SHELTER_KIT">Shelter kit</option><option value="OTHER">Other</option>
+            </select></div>
+            <div class="form-field"><label for="resourceStatus">Status</label><select id="resourceStatus" name="status"><option value="AVAILABLE">Available</option><option value="PARTIALLY_AVAILABLE">Partially available</option><option value="DEPLOYED">Deployed</option><option value="MAINTENANCE">Maintenance</option><option value="UNAVAILABLE">Unavailable</option></select></div>
+            <div class="form-field form-field-wide"><label for="resourceLocation">Location <span>*</span></label><input id="resourceLocation" name="location" required maxlength="160" placeholder="Base, depot, or staging area" /></div>
+            <div class="form-field form-field-wide"><label for="resourceDescription">Description</label><textarea id="resourceDescription" name="description" rows="3" maxlength="500" placeholder="Capability or readiness notes"></textarea></div>
+            <div class="form-field"><label for="resourceQuantity">Quantity</label><input id="resourceQuantity" name="quantity" type="number" min="0" value="1" /></div>
+            <div class="form-field"><label for="availableQuantity">Available quantity</label><input id="availableQuantity" name="available_quantity" type="number" min="0" value="1" /></div>
+            <div class="form-field"><label for="resourceCapacity">Capacity</label><input id="resourceCapacity" name="capacity" type="number" min="0" placeholder="Optional" /></div>
+            <div class="form-field"><label for="resourceLatitude">Latitude</label><input id="resourceLatitude" name="latitude" type="number" step="any" min="-90" max="90" placeholder="Optional" /></div>
+            <div class="form-field"><label for="resourceLongitude">Longitude</label><input id="resourceLongitude" name="longitude" type="number" step="any" min="-180" max="180" placeholder="Optional" /></div>
+          </div>
+          <div class="form-error" id="resourceFormError" role="alert"></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button><button type="submit" class="btn btn-primary modal-submit">Save resource</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
